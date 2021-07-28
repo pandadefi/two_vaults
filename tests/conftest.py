@@ -39,49 +39,48 @@ def keeper(accounts):
 
 
 @pytest.fixture
-def token():
-    token_address = "0x6b175474e89094c44da98b954eedeac495271d0f"  # this should be the address of the ERC-20 used by the strategy/vault (DAI)
-    yield Contract(token_address)
+def tokens():
+    yield [Contract("0xdAC17F958D2ee523a2206206994597C13D831ec7"), Contract("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")]
 
 
 @pytest.fixture
-def amount(accounts, token, user):
-    amount = 10_000 * 10 ** token.decimals()
-    # In order to get some funds for the token you are about to use,
-    # it impersonate an exchange address to use it's funds.
-    reserve = accounts.at("0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643", force=True)
-    token.transfer(user, amount, {"from": reserve})
-    yield amount
+def amounts(accounts, tokens, user, gov):
+    print("AMOUNTS")
+    amount0 = 10_000 * 10 ** tokens[0].decimals()
+    reserve = accounts.at("0x5754284f345afc66a98fbb0a0afe71e0f007b949", force=True)
+    tokens[0].transfer(user, amount0, {"from": reserve})
+    tokens[0].transfer(gov, amount0, {"from": reserve})
+
+    amount1 = 10_000 * 10 ** tokens[1].decimals()
+    reserve = accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
+    tokens[1].transfer(user, amount1, {"from": reserve})
+    tokens[1].transfer(gov, amount1, {"from": reserve})
+    
+    yield [amount0, amount1]
 
 
 @pytest.fixture
-def weth():
-    token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-    yield Contract(token_address)
-
-
-@pytest.fixture
-def weth_amout(user, weth):
-    weth_amout = 10 ** weth.decimals()
-    user.transfer(weth, weth_amout)
-    yield weth_amout
-
-
-@pytest.fixture
-def vault(pm, gov, rewards, guardian, management, token):
+def vaults(pm, gov, rewards, guardian, management, tokens):
     Vault = pm(config["dependencies"][0]).Vault
-    vault = guardian.deploy(Vault)
-    vault.initialize(token, gov, rewards, "", "", guardian, management)
-    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
-    vault.setManagement(management, {"from": gov})
-    yield vault
+    vault0 = guardian.deploy(Vault)
+    vault0.initialize(tokens[0], gov, rewards, "", "", guardian, management)
+    vault0.setDepositLimit(2 ** 256 - 1, {"from": gov})
+    vault0.setManagement(management, {"from": gov})
+    
+    vault1 = guardian.deploy(Vault)
+    vault1.initialize(tokens[1], gov, rewards, "", "", guardian, management)
+    vault1.setDepositLimit(2 ** 256 - 1, {"from": gov})
+    vault1.setManagement(management, {"from": gov})
+    yield [vault0, vault1]
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, Strategy, gov):
-    strategy = strategist.deploy(Strategy, vault)
+def strategy(strategist, keeper, vaults, Strategy, gov):
+    strategy = strategist.deploy(Strategy, vaults)
     strategy.setKeeper(keeper)
-    vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
+    vaults[0].addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
+    vaults[1].addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
+    
     yield strategy
 
 
