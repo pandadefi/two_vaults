@@ -40,23 +40,31 @@ def keeper(accounts):
 
 @pytest.fixture
 def tokens():
-    yield [Contract("0xdAC17F958D2ee523a2206206994597C13D831ec7"), Contract("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")]
+    yield [
+        Contract("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+        Contract("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+    ]
 
 
 @pytest.fixture
-def amounts(accounts, tokens, user, gov):
-    print("AMOUNTS")
-    amount0 = 10_000 * 10 ** tokens[0].decimals()
-    reserve = accounts.at("0x5754284f345afc66a98fbb0a0afe71e0f007b949", force=True)
-    tokens[0].transfer(user, amount0, {"from": reserve})
-    tokens[0].transfer(gov, amount0, {"from": reserve})
+def amounts(get_tokens, user, gov):
+    get_tokens(gov)
+    yield get_tokens(user)
 
-    amount1 = 10_000 * 10 ** tokens[1].decimals()
-    reserve = accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
-    tokens[1].transfer(user, amount1, {"from": reserve})
-    tokens[1].transfer(gov, amount1, {"from": reserve})
-    
-    yield [amount0, amount1]
+
+@pytest.fixture
+def get_tokens(accounts, tokens):
+    def get_tokens(to):
+        amount0 = 10_000 * 10 ** tokens[0].decimals()
+        reserve = accounts.at("0x5754284f345afc66a98fbb0a0afe71e0f007b949", force=True)
+        tokens[0].transfer(to, amount0, {"from": reserve})
+
+        amount1 = 10_000 * 10 ** tokens[1].decimals()
+        reserve = accounts.at("0x47ac0fb4f2d84898e4d9e7b4dab3c24507a6d503", force=True)
+        tokens[1].transfer(to, amount1, {"from": reserve})
+        return [amount0, amount1]
+
+    yield get_tokens
 
 
 @pytest.fixture
@@ -66,7 +74,7 @@ def vaults(pm, gov, rewards, guardian, management, tokens):
     vault0.initialize(tokens[0], gov, rewards, "", "", guardian, management)
     vault0.setDepositLimit(2 ** 256 - 1, {"from": gov})
     vault0.setManagement(management, {"from": gov})
-    
+
     vault1 = guardian.deploy(Vault)
     vault1.initialize(tokens[1], gov, rewards, "", "", guardian, management)
     vault1.setDepositLimit(2 ** 256 - 1, {"from": gov})
@@ -80,8 +88,13 @@ def strategy(strategist, keeper, vaults, Strategy, gov):
     strategy.setKeeper(keeper)
     vaults[0].addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
     vaults[1].addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
-    
+
     yield strategy
+
+
+@pytest.fixture
+def uniswap_router():
+    yield Contract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
 
 
 @pytest.fixture(scope="session")

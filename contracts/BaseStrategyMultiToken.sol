@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 
-
 struct StrategyParams {
     uint256 performanceFee;
     uint256 activation;
@@ -41,18 +40,25 @@ interface VaultAPI is IERC20 {
 
     function deposit(uint256 amount) external returns (uint256);
 
-    function deposit(uint256 amount, address recipient) external returns (uint256);
+    function deposit(uint256 amount, address recipient)
+        external
+        returns (uint256);
 
     // NOTE: Vyper produces multiple signatures for a given function with "default" args
     function withdraw() external returns (uint256);
 
     function withdraw(uint256 maxShares) external returns (uint256);
 
-    function withdraw(uint256 maxShares, address recipient) external returns (uint256);
+    function withdraw(uint256 maxShares, address recipient)
+        external
+        returns (uint256);
 
     function token() external view returns (address);
 
-    function strategies(address _strategy) external view returns (StrategyParams memory);
+    function strategies(address _strategy)
+        external
+        view
+        returns (StrategyParams memory);
 
     function pricePerShare() external view returns (uint256);
 
@@ -157,7 +163,12 @@ interface StrategyAPI {
 
     function harvest() external;
 
-    event Harvested(uint256 profit, uint256 loss, uint256 debtPayment, uint256 debtOutstanding);
+    event Harvested(
+        uint256 profit,
+        uint256 loss,
+        uint256 debtPayment,
+        uint256 debtOutstanding
+    );
 }
 
 /**
@@ -230,7 +241,12 @@ abstract contract BaseStrategyMultiToken {
     IERC20[NUM_TOKENS] public wants;
 
     // So indexers can keep track of this
-    event Harvested(uint256 profit, uint256 loss, uint256 debtPayment, uint256 debtOutstanding);
+    event Harvested(
+        uint256 profit,
+        uint256 loss,
+        uint256 debtPayment,
+        uint256 debtOutstanding
+    );
 
     event UpdatedStrategist(address newStrategist);
 
@@ -275,7 +291,13 @@ abstract contract BaseStrategyMultiToken {
     }
 
     function _onlyEmergencyAuthorized() internal {
-        require(msg.sender == strategist || msg.sender == governance() || msg.sender == vaults[0].guardian() || msg.sender == vaults[0].management());    }
+        require(
+            msg.sender == strategist ||
+                msg.sender == governance() ||
+                msg.sender == vaults[0].guardian() ||
+                msg.sender == vaults[0].management()
+        );
+    }
 
     function _onlyStrategist() internal {
         require(msg.sender == strategist);
@@ -294,9 +316,9 @@ abstract contract BaseStrategyMultiToken {
                 msg.sender == vaults[0].management()
         );
     }
-    
-    function findVault() public view returns(uint256) {
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+
+    function findVault() public view returns (uint256) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             if (msg.sender == address(vaults[i])) {
                 return i;
             }
@@ -304,20 +326,20 @@ abstract contract BaseStrategyMultiToken {
         return NUM_TOKENS;
     }
 
-    function isOneOfTheVaults() internal returns(uint256) {
+    function isOneOfTheVaults() internal returns (uint256) {
         uint256 vaultId = findVault();
         require(vaultId != NUM_TOKENS, "!vault");
         return vaultId;
     }
 
-    function vault() public view returns(address) {
+    function vault() public view returns (address) {
         return address(vaults[findVault()]);
     }
-    
-    function want() public view returns(address) {
+
+    function want() public view returns (address) {
         return address(wants[findVault()]);
     }
-    
+
     constructor(address[NUM_TOKENS] memory _vaults) public {
         _initialize(_vaults, msg.sender, msg.sender, msg.sender);
     }
@@ -340,9 +362,12 @@ abstract contract BaseStrategyMultiToken {
         address _rewards,
         address _keeper
     ) internal {
-        require(address(wants[0]) == address(0), "Strategy already initialized");
+        require(
+            address(wants[0]) == address(0),
+            "Strategy already initialized"
+        );
 
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             vaults[i] = VaultAPI(_vaults[i]);
             wants[i] = IERC20(vaults[i].token());
             SafeERC20.safeApprove(wants[i], address(vaults[i]), uint256(-1)); // Give Vault unlimited access (might save gas)
@@ -405,13 +430,12 @@ abstract contract BaseStrategyMultiToken {
     function setRewards(address _rewards) external {
         _onlyStrategist();
         require(_rewards != address(0));
-        for (uint i = 0; i < NUM_TOKENS; i++){
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             vaults[i].approve(rewards, 0);
             vaults[i].approve(_rewards, uint256(-1));
         }
         rewards = _rewards;
         emit UpdatedRewards(_rewards);
-
     }
 
     /**
@@ -521,7 +545,11 @@ abstract contract BaseStrategyMultiToken {
      * @param _amtInWei The amount (in wei/1e-18 ETH) to convert to `want`
      * @return The amount in `want` of `_amtInEth` converted to `want`
      **/
-    function ethToWants(uint256 _amtInWei) public view virtual returns (uint256[NUM_TOKENS] memory);
+    function ethToWants(uint256 _amtInWei)
+        public
+        view
+        virtual
+        returns (uint256[NUM_TOKENS] memory);
 
     /**
      * @notice
@@ -547,7 +575,11 @@ abstract contract BaseStrategyMultiToken {
      *  value to be "safe".
      * @return The estimated total assets in this Strategy.
      */
-    function estimatedTotalAssets(IERC20 want) public view virtual returns (uint256);
+    function estimatedTotalAssets(IERC20 _want)
+        public
+        view
+        virtual
+        returns (uint256);
 
     function estimatedTotalAssets() public view {
         estimatedTotalAssets(wants[findVault()]);
@@ -562,8 +594,11 @@ abstract contract BaseStrategyMultiToken {
      * @return True if the strategy is actively managing a position.
      */
     function isActive() public view returns (bool) {
-        for (uint256 i = 0; i < NUM_TOKENS; i++){
-            if ((vaults[i].strategies(address(this)).debtRatio > 0 || estimatedTotalAssets(wants[i]) > 0) == false) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
+            if (
+                (vaults[i].strategies(address(this)).debtRatio > 0 ||
+                    estimatedTotalAssets(wants[i]) > 0) == false
+            ) {
                 return false;
             }
         }
@@ -612,11 +647,13 @@ abstract contract BaseStrategyMultiToken {
      *
      * See comments regarding `_debtOutstanding` on `prepareReturn()`.
      */
-    function adjustPositions(uint256[NUM_TOKENS] memory _debtOutstanding) internal virtual;
+    function adjustPositions(uint256[NUM_TOKENS] memory _debtOutstanding)
+        internal
+        virtual;
 
     /**
      * Liquidate up to `_amountNeeded` of `want` of this strategy's positions,
-     * irregardless of slippage. Any excess will be re-invested with `adjustPosition()`.
+     * irregardless of slippage. Any excess will be re-invested with `adjustPositions()`.
      * This function should return the amount of `want` tokens made available by the
      * liquidation. If there is a difference between them, `_loss` indicates whether the
      * difference is due to a realized loss, or if there is some other sitution at play
@@ -624,7 +661,10 @@ abstract contract BaseStrategyMultiToken {
      *
      * NOTE: The invariant `_liquidatedAmount + _loss <= _amountNeeded` should always be maintained
      */
-    function liquidatePosition(IERC20 want, uint256 _amountNeeded) internal virtual returns (uint256 _liquidatedAmount, uint256 _loss);
+    function liquidatePosition(IERC20 want, uint256 _amountNeeded)
+        internal
+        virtual
+        returns (uint256 _liquidatedAmount, uint256 _loss);
 
     /**
      * Liquidate everything and returns the amount that got freed.
@@ -632,7 +672,10 @@ abstract contract BaseStrategyMultiToken {
      * liquidate all of the Strategy's positions back to the Vault.
      */
 
-    function liquidateAllPositions(IERC20 want) internal virtual returns (uint256 _amountFreed);
+    function liquidateAllPositions(IERC20 want)
+        internal
+        virtual
+        returns (uint256 _amountFreed);
 
     /**
      * @notice
@@ -652,7 +695,12 @@ abstract contract BaseStrategyMultiToken {
      * @param callCostInWei The keeper's estimated gas cost to call `tend()` (in wei).
      * @return `true` if `tend()` should be called, `false` otherwise.
      */
-    function tendTrigger(uint256 callCostInWei) public view virtual returns (bool) {
+    function tendTrigger(uint256 callCostInWei)
+        public
+        view
+        virtual
+        returns (bool)
+    {
         // We usually don't need tend, but if there are positions that need
         // active maintainence, overriding this function is how you would
         // signal for that.
@@ -675,7 +723,7 @@ abstract contract BaseStrategyMultiToken {
         _onlyKeepers();
         // Don't take profits with this call, but adjust for better gains
         uint256[NUM_TOKENS] memory debts;
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             debts[i] = vaults[i].debtOutstanding();
         }
         adjustPositions(debts);
@@ -711,24 +759,29 @@ abstract contract BaseStrategyMultiToken {
      * @param callCostInWei The keeper's estimated gas cost to call `harvest()` (in wei).
      * @return `true` if `harvest()` should be called, `false` otherwise.
      */
-    function harvestTrigger(uint256 callCostInWei) public view virtual returns (bool) {
+    function harvestTrigger(uint256 callCostInWei)
+        public
+        view
+        virtual
+        returns (bool)
+    {
         uint256[NUM_TOKENS] memory callCost = ethToWants(callCostInWei);
 
         uint256 totals = 0;
         uint256 totalDebt = 0;
-        
 
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             StrategyParams memory params = vaults[i].strategies(address(this));
             // Should not trigger if Strategy is not activated
             if (params.activation == 0) return false;
-        
 
             // Should not trigger if we haven't waited long enough since previous harvest
-            if (block.timestamp.sub(params.lastReport) < minReportDelay) return false;
+            if (block.timestamp.sub(params.lastReport) < minReportDelay)
+                return false;
 
             // Should trigger if hasn't been called in a while
-            if (block.timestamp.sub(params.lastReport) >= maxReportDelay) return true;
+            if (block.timestamp.sub(params.lastReport) >= maxReportDelay)
+                return true;
 
             // If some amount is owed, pay it back
             // NOTE: Since debt is based on deposits, it makes sense to guard against large
@@ -778,7 +831,7 @@ abstract contract BaseStrategyMultiToken {
         _onlyKeepers();
         uint256[NUM_TOKENS] memory debts;
 
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             uint256 profit = 0;
             uint256 loss = 0;
             uint256 debtOutstanding = vaults[i].debtOutstanding();
@@ -847,12 +900,18 @@ abstract contract BaseStrategyMultiToken {
     function migrate(address _newStrategy) external {
         isOneOfTheVaults();
 
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
-          require(BaseStrategyMultiToken(_newStrategy).vaults(i) == vaults[i]);
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
+            require(
+                BaseStrategyMultiToken(_newStrategy).vaults(i) == vaults[i]
+            );
         }
         prepareMigration(_newStrategy);
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
-            SafeERC20.safeTransfer(wants[i], _newStrategy, wants[i].balanceOf(address(this)));
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
+            SafeERC20.safeTransfer(
+                wants[i],
+                _newStrategy,
+                wants[i].balanceOf(address(this))
+            );
         }
     }
 
@@ -869,7 +928,7 @@ abstract contract BaseStrategyMultiToken {
     function setEmergencyExit() external {
         _onlyEmergencyAuthorized();
         emergencyExit = true;
-        for(uint256 i=0; i < NUM_TOKENS; i++) {
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             vaults[i].revokeStrategy();
         }
 
@@ -915,14 +974,19 @@ abstract contract BaseStrategyMultiToken {
      */
     function sweep(address _token) external {
         _onlyGovernance();
-        for (uint256 i = 0; i < NUM_TOKENS; i++){
+        for (uint256 i = 0; i < NUM_TOKENS; i++) {
             require(_token != address(wants[i]), "!want");
             require(_token != address(vaults[i]), "!shares");
         }
 
         address[] memory _protectedTokens = protectedTokens();
-        for (uint256 i; i < _protectedTokens.length; i++) require(_token != _protectedTokens[i], "!protected");
+        for (uint256 i; i < _protectedTokens.length; i++)
+            require(_token != _protectedTokens[i], "!protected");
 
-        SafeERC20.safeTransfer(IERC20(_token), governance(), IERC20(_token).balanceOf(address(this)));
+        SafeERC20.safeTransfer(
+            IERC20(_token),
+            governance(),
+            IERC20(_token).balanceOf(address(this))
+        );
     }
 }

@@ -4,7 +4,15 @@ import pytest
 
 
 def test_operation(
-    chain, accounts, tokens, vaults, strategy, user, strategist, amounts, RELATIVE_APPROX
+    chain,
+    accounts,
+    tokens,
+    vaults,
+    strategy,
+    user,
+    strategist,
+    amounts,
+    RELATIVE_APPROX,
 ):
     # Deposit to the vault
     user_balance_before0 = tokens[0].balanceOf(user)
@@ -20,8 +28,14 @@ def test_operation(
     # harvest
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(tokens[0]), rel=RELATIVE_APPROX) == amounts[0]
-    assert pytest.approx(strategy.estimatedTotalAssets(tokens[1]), rel=RELATIVE_APPROX) == amounts[1]
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(tokens[0]), rel=RELATIVE_APPROX)
+        == amounts[0]
+    )
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(tokens[1]), rel=RELATIVE_APPROX)
+        == amounts[1]
+    )
 
     # tend()
     strategy.tend()
@@ -29,11 +43,13 @@ def test_operation(
     # withdrawal
     vaults[0].withdraw({"from": user})
     assert (
-        pytest.approx(tokens[0].balanceOf(user), rel=RELATIVE_APPROX) == user_balance_before0
+        pytest.approx(tokens[0].balanceOf(user), rel=RELATIVE_APPROX)
+        == user_balance_before0
     )
     vaults[1].withdraw({"from": user})
     assert (
-        pytest.approx(tokens[1].balanceOf(user), rel=RELATIVE_APPROX) == user_balance_before1
+        pytest.approx(tokens[1].balanceOf(user), rel=RELATIVE_APPROX)
+        == user_balance_before1
     )
 
 
@@ -55,7 +71,17 @@ def test_operation(
 
 
 def test_profitable_harvest(
-    chain, gov, tokens, vaults, strategy, user, strategist, amounts, RELATIVE_APPROX
+    chain,
+    gov,
+    tokens,
+    vaults,
+    strategy,
+    user,
+    strategist,
+    amounts,
+    RELATIVE_APPROX,
+    uniswap_router,
+    get_tokens,
 ):
     # Deposit to the vault
     tokens[0].approve(vaults[0].address, amounts[0], {"from": user})
@@ -69,26 +95,44 @@ def test_profitable_harvest(
     # Harvest 1: Send funds through the strategy
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(tokens[0]), rel=RELATIVE_APPROX) == amounts[0]
-    assert pytest.approx(strategy.estimatedTotalAssets(tokens[1]), rel=RELATIVE_APPROX) == amounts[1]
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(tokens[0]), rel=RELATIVE_APPROX)
+        == amounts[0]
+    )
+    assert (
+        pytest.approx(strategy.estimatedTotalAssets(tokens[1]), rel=RELATIVE_APPROX)
+        == amounts[1]
+    )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
-    
-    tokens[0].transfer(strategy, amounts[0] / 1_000, {"from": gov})
-    tokens[1].transfer(strategy, amounts[1] / 1_000, {"from": gov})
+
+    # Make profits from trading fees.
+
+    tokens[0].approve(uniswap_router, 10 ** 18, {"from": user})
+    tokens[1].approve(uniswap_router, 10 ** 18, {"from": user})
+
+    get_tokens(user)
+    [amount0, amount1] = get_tokens(user)
+
+    for x in range(10):
+        uniswap_router.swapExactTokensForTokens(
+            amount0, 1, tokens, user, chain.time() + 10, {"from": user}
+        )
+        uniswap_router.swapExactTokensForTokens(
+            amount1, 1, tokens[::-1], user, chain.time() + 10, {"from": user}
+        )
 
     # Harvest 2: Realize profit
     chain.sleep(1)
     strategy.harvest()
     chain.sleep(3600 * 6)  # 6 hrs needed for profits to unlock
     chain.mine(1)
+
     profit0 = tokens[0].balanceOf(vaults[0].address)  # Profits go to vault
     profit1 = tokens[1].balanceOf(vaults[1].address)  # Profits go to vault
-    assert profit0 == amounts[0] / 1_000
-    assert profit1 == amounts[1] / 1_000
-    # TODO: Uncomment the lines below
-    # assert token.balanceOf(strategy) + profit > amount
-    # assert vault.pricePerShare() > before_pps
+    assert profit0 > 0
+    assert profit1 > 0
+    assert pytest.approx(profit0, rel=10e-4) == profit1
 
 
 # def test_change_debt(
@@ -115,4 +159,3 @@ def test_profitable_harvest(
 #     # chain.sleep(1)
 #     # strategy.harvest()
 #     # assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == half
-
